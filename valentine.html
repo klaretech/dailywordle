@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JCEB WORDLE</title>
+<style>
+* {box-sizing:border-box;}
+:root {--tile:52px; --font:20px;}
+@media(max-width:480px){:root{--tile:44px;--font:18px;}}
+body{margin:0;min-height:100vh;font-family:Inter,sans-serif;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#ffe0e9,#fff5f8);}
+.container{background:white;padding:24px;width:100%;max-width:380px;border-radius:20px;box-shadow:0 15px 40px rgba(0,0,0,0.15);text-align:center;}
+h1{color:#ff4d6d;margin-bottom:12px;}
+.grid{display:grid;grid-template-rows:repeat(6,auto);gap:8px;margin:0 auto 16px;width:fit-content;}
+.row{display:grid;grid-template-columns:repeat(5,var(--tile));gap:8px;}
+.cell{width:var(--tile);height:var(--tile);border:2px solid #d3d6da;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:var(--font);font-weight:700;line-height:1;text-transform:uppercase;user-select:none;}
+.correct{background:#6aaa64;color:white;border-color:#6aaa64;}
+.present{background:#c9b458;color:white;border-color:#c9b458;}
+.absent{background:#787c7e;color:white;border-color:#787c7e;}
+.keyboard{margin-top:12px;}
+.key-row{display:flex;justify-content:center;gap:6px;margin-bottom:6px;}
+.key{height:46px;min-width:32px;padding:0 6px;background:#d3d6da;border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;line-height:1;cursor:pointer;user-select:none;}
+.key.wide{min-width:52px;}
+.controls{margin-top:10px;}
+button{padding:10px 16px;border:none;border-radius:8px;background:#ff4d6d;color:white;font-size:14px;cursor:pointer;margin:4px;}
+input{width:100%;max-width:280px;margin:12px auto 0;padding:12px;font-size:16px;line-height:1.2;text-align:center;border-radius:8px;border:1px solid #ccc;display:block;}
+.plead{margin-top:10px;color:#ff4d6d;font-size:14px;}
+img{width:200px;margin:16px auto 0;display:block;border-radius:12px;}
+.hidden{display:none;}
+</style>
+</head>
+<body>
+
+<audio id="bgMusic" loop>
+  <source src="soft-music.mp3" type="audio/mp3">
+</audio>
+<audio id="yesMusic" loop>
+  <source src="celebrate.mp3" type="audio/mp3">
+</audio>
+
+<div class="container">
+<h1 id="title">Solve the Puzzle 💭</h1>
+<div id="grid" class="grid"></div>
+<div id="keyboard" class="keyboard"></div>
+<div id="controls" class="controls hidden">
+  <button onclick="tryAgain()">Try Again</button>
+  <button onclick="giveUp()">Give Up</button>
+</div>
+<input id="answerBox" class="hidden" placeholder="Type YES or NO">
+<div id="pleading" class="plead hidden"></div>
+<img id="cat" class="hidden" src="cat.gif">
+<img id="finalCat" class="hidden" src="happy-cat.gif">
+<h1 id="finalMsg" class="hidden" style="color:#ff4d6d;margin-top:12px;"></h1>
+</div>
+
+<script>
+const clueWords=["BABAB","CHOOT","JOSHY","TOINK"];
+const keyboardLayout=[["O","S","H","I","T","Y","U","I"],["W","L","A","B","G","H","J","K"],["ENTER","Z","Y","O","U","M","⌫"]];
+let targetWord="",attempts=[],currentGuess="",maxAttempts=6,pleadCount=0;
+
+const bgMusic=document.getElementById("bgMusic");
+document.body.addEventListener("click",()=>bgMusic.play().catch(()=>{}),{once:true});
+
+function newPuzzle(){
+  targetWord=clueWords[Math.floor(Math.random()*clueWords.length)];
+  attempts=[]; currentGuess=""; pleadCount=0;
+  document.getElementById("controls").classList.add("hidden");
+  document.getElementById("keyboard").classList.remove("hidden");
+  document.getElementById("title").textContent="Solve the Puzzle 💭";
+  document.getElementById("answerBox").classList.add("hidden");
+  document.getElementById("pleading").classList.add("hidden");
+  document.getElementById("cat").classList.add("hidden");
+  document.getElementById("finalCat").classList.add("hidden");
+  document.getElementById("finalMsg").classList.add("hidden");
+  renderGrid(); renderKeyboard();
+}
+
+function renderGrid(custom=null){
+  const grid=document.getElementById("grid");
+  grid.innerHTML="";
+  if(custom){
+    custom.forEach(w=>{
+      const row=document.createElement("div");
+      row.className="row";
+      w.padEnd(5," ").split("").forEach(c=>{
+        const cell=document.createElement("div");
+        cell.className="cell"; cell.textContent=c;
+        row.appendChild(cell);
+      });
+      grid.appendChild(row);
+    });
+    return;
+  }
+  for(let i=0;i<maxAttempts;i++){
+    const row=document.createElement("div"); row.className="row";
+    for(let j=0;j<5;j++){
+      const cell=document.createElement("div"); cell.className="cell";
+      if(attempts[i]){
+        const l=attempts[i][j]; cell.textContent=l;
+        if(l===targetWord[j]) cell.classList.add("correct");
+        else if(targetWord.includes(l)) cell.classList.add("present");
+        else cell.classList.add("absent");
+      } else if(i===attempts.length && currentGuess[j]) cell.textContent=currentGuess[j];
+      row.appendChild(cell);
+    }
+    grid.appendChild(row);
+  }
+}
+
+function renderKeyboard(){
+  const k=document.getElementById("keyboard"); k.innerHTML="";
+  keyboardLayout.forEach(r=>{
+    const row=document.createElement("div"); row.className="key-row";
+    r.forEach(kc=>{
+      const key=document.createElement("div"); key.className="key"; key.textContent=kc;
+      if(kc==="ENTER"||kc==="⌫") key.classList.add("wide");
+      key.onclick=()=>handleKey(kc); row.appendChild(key);
+    });
+    k.appendChild(row);
+  });
+}
+
+function handleKey(k){
+  if(attempts.length>=maxAttempts) return;
+  if(k==="ENTER" && currentGuess.length===5){
+    attempts.push(currentGuess); currentGuess="";
+    if(attempts.at(-1)===targetWord || attempts.length===maxAttempts)
+      document.getElementById("controls").classList.remove("hidden");
+  } else if(k==="⌫") currentGuess=currentGuess.slice(0,-1);
+  else if(currentGuess.length<5 && k.length===1) currentGuess+=k;
+  renderGrid();
+}
+
+function tryAgain(){ newPuzzle(); }
+
+function giveUp(){
+  bgMusic.pause();
+  document.getElementById("keyboard").classList.add("hidden");
+  document.getElementById("controls").classList.add("hidden");
+  document.getElementById("title").textContent="";
+  renderGrid(["WILL","YOU","BE","MY","VALENTINE?"]);
+  document.getElementById("answerBox").classList.remove("hidden");
+  document.getElementById("pleading").classList.add("hidden");
+}
+
+document.getElementById("answerBox").addEventListener("keydown",e=>{
+  if(e.key!=="Enter") return;
+  const ans=e.target.value.trim().toUpperCase();
+  if(ans==="YES"){
+    document.getElementById("yesMusic").play();
+    document.getElementById("cat").classList.remove("hidden");
+    setTimeout(()=>{ // move to final happy cat page
+      document.getElementById("cat").classList.add("hidden");
+      document.getElementById("finalCat").classList.remove("hidden");
+      document.getElementById("finalMsg").textContent="Thank You Sweet Baby! I love You! <3";
+      document.getElementById("finalMsg").classList.remove("hidden");
+    },1500);
+    document.getElementById("pleading").classList.add("hidden");
+  } else if(ans==="NO"){
+    pleadCount++;
+    const msgs=[
+      "WHY NO BABOIDS",
+      "WHY IKAW SAYING NO BABY",
+      "NO I WILL CRY!!"
+    ];
+    const idx=Math.min(pleadCount-1,msgs.length-1);
+    document.getElementById("pleading").textContent=msgs[idx];
+    document.getElementById("pleading").classList.remove("hidden");
+  }
+});
+
+newPuzzle();
+</script>
+</body>
+</html>
